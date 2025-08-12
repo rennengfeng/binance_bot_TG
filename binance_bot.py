@@ -353,6 +353,11 @@ class NotificationManager:
             "resize_keyboard": True,
             "one_time_keyboard": True
         }
+        self.cancel_keyboard = {
+            "keyboard": [["0. 取消"]],
+            "resize_keyboard": True,
+            "one_time_keyboard": True
+        }
     
     def send_alert(self, symbol, market_type, window, change_data, threshold):
         """发送价格警报（纯文本模式）"""
@@ -535,13 +540,18 @@ class NotificationManager:
         except Exception as e:
             logger.error(f"处理命令错误: {e}")
     
+    def is_cancel_command(self, text):
+        """检查是否为取消命令"""
+        cancel_words = ["取消", "0", "exit", "quit", "no", "n", "返回", "back"]
+        return text.lower() in cancel_words
+    
     def handle_guided_flow(self, chat_id, text):
         """处理交互式引导流程（纯文本模式）"""
         state = self.user_state[chat_id]["state"]
         data = self.user_state[chat_id]["data"]
         
-        # 取消操作
-        if text.lower() in ["取消", "exit", "quit", "/cancel"]:
+        # 检查是否为取消命令
+        if self.is_cancel_command(text):
             self.user_state[chat_id] = {"state": "IDLE", "data": {}}
             self.send_command_response(chat_id, "❌ 操作已取消", reply_markup=self.setup_keyboard)
             return
@@ -564,10 +574,10 @@ class NotificationManager:
                 self.send_command_response(chat_id, 
                     "📊 请选择交易类型:\n"
                     "1. 现货交易\n"
-                    "2. 永续合约\n"
-                    "回复数字选择", 
+                    "2. 永续合约\n\n"
+                    "输入 '0' 或 '取消' 返回主菜单", 
                     reply_markup={
-                        "keyboard": [["1. 现货", "2. 永续合约"]],
+                        "keyboard": [["1. 现货", "2. 永续合约"], ["0. 取消"]],
                         "resize_keyboard": True,
                         "one_time_keyboard": True
                     }
@@ -578,11 +588,19 @@ class NotificationManager:
                 if text in ["1", "1. 现货", "现货"]:
                     data["market_type"] = "spot"
                     self.user_state[chat_id]["state"] = "ADD_CONFIG_STEP3"
-                    self.send_command_response(chat_id, "🕒 请输入监控时长（分钟）:")
+                    self.send_command_response(chat_id, 
+                        "🕒 请输入监控时长（分钟）:\n\n"
+                        "输入 '0' 或 '取消' 返回主菜单",
+                        reply_markup=self.cancel_keyboard
+                    )
                 elif text in ["2", "2. 永续合约", "永续合约"]:
                     data["market_type"] = "futures"
                     self.user_state[chat_id]["state"] = "ADD_CONFIG_STEP3"
-                    self.send_command_response(chat_id, "🕒 请输入监控时长（分钟）:")
+                    self.send_command_response(chat_id, 
+                        "🕒 请输入监控时长（分钟）:\n\n"
+                        "输入 '0' 或 '取消' 返回主菜单",
+                        reply_markup=self.cancel_keyboard
+                    )
                 else:
                     self.send_command_response(chat_id, "⚠️ 请选择 '1. 现货' 或 '2. 永续合约'")
             
@@ -599,7 +617,11 @@ class NotificationManager:
                 
                 data["window"] = window
                 self.user_state[chat_id]["state"] = "ADD_CONFIG_STEP4"
-                self.send_command_response(chat_id, "📈 请输入涨跌幅阈值（百分比，如 0.5）:")
+                self.send_command_response(chat_id, 
+                    "📈 请输入涨跌幅阈值（百分比，如 0.5）:\n\n"
+                    "输入 '0' 或 '取消' 返回主菜单",
+                    reply_markup=self.cancel_keyboard
+                )
             
             # 步骤4: 输入阈值
             elif state == "ADD_CONFIG_STEP4":
@@ -644,11 +666,17 @@ class NotificationManager:
                 
                 # 询问是否继续添加
                 self.user_state[chat_id]["state"] = "ADD_CONFIG_CONTINUE"
-                self.send_command_response(chat_id, "❓ 是否继续添加其他监控配置？\n1. 是\n2. 否", reply_markup={
-                    "keyboard": [["1. 是", "2. 否"]],
-                    "resize_keyboard": True,
-                    "one_time_keyboard": True
-                })
+                self.send_command_response(chat_id, 
+                    "❓ 是否继续添加其他监控配置？\n"
+                    "1. 是\n"
+                    "2. 否\n\n"
+                    "输入 '0' 或 '取消' 返回主菜单", 
+                    reply_markup={
+                        "keyboard": [["1. 是", "2. 否"], ["0. 取消"]],
+                        "resize_keyboard": True,
+                        "one_time_keyboard": True
+                    }
+                )
             
             # 步骤5: 是否继续添加
             elif state == "ADD_CONFIG_CONTINUE":
@@ -656,17 +684,24 @@ class NotificationManager:
                     self.user_state[chat_id] = {"state": "ADD_CONFIG_STEP1", "data": {}}
                     self.send_command_response(chat_id, "📝 请输入要监控的币种（如 BTCUSDT）:")
                 elif text in ["2", "2. 否", "否", "no", "n"]:
-                    self.user_state[chat_id] = {"state": "IDLE", "data": {}}
-                    self.send_command_response(chat_id, "❓ 是否现在开启监控？\n1. 开启监控\n2. 暂不开启", reply_markup={
-                        "keyboard": [["1. 开启监控", "2. 暂不开启"]],
-                        "resize_keyboard": True,
-                        "one_time_keyboard": True
-                    })
+                    # 询问是否开启监控
+                    self.user_state[chat_id]["state"] = "ENABLE_MONITOR_QUESTION"
+                    self.send_command_response(chat_id, 
+                        "❓ 是否开启监控？\n"
+                        "1. 立即开启\n"
+                        "2. 稍后手动开启\n\n"
+                        "输入 '0' 或 '取消' 返回主菜单",
+                        reply_markup={
+                            "keyboard": [["1. 开启监控", "2. 暂不开启"], ["0. 取消"]],
+                            "resize_keyboard": True,
+                            "one_time_keyboard": True
+                        }
+                    )
                 else:
                     self.send_command_response(chat_id, "⚠️ 请选择 '1. 是' 或 '2. 否'")
             
-            # 处理开启监控选项
-            elif state == "START_MONITOR_QUESTION":
+            # 步骤6: 询问是否开启监控
+            elif state == "ENABLE_MONITOR_QUESTION":
                 if text in ["1", "1. 开启监控", "开启监控"]:
                     self.bot_state.enable_monitoring()
                     
@@ -676,12 +711,15 @@ class NotificationManager:
                     status_msg = "✅ 监控已开启\n\n" + status_msg
                     
                     self.send_command_response(chat_id, status_msg, reply_markup=self.setup_keyboard)
+                    self.user_state[chat_id] = {"state": "IDLE", "data": {}}
                 elif text in ["2", "2. 暂不开启", "暂不开启"]:
-                    self.send_command_response(chat_id, "⏸️ 监控未开启，您随时可以发送 '3' 开启监控", reply_markup=self.setup_keyboard)
+                    self.send_command_response(chat_id, 
+                        "⏸️ 监控未开启，您随时可以发送 '3' 开启监控", 
+                        reply_markup=self.setup_keyboard
+                    )
+                    self.user_state[chat_id] = {"state": "IDLE", "data": {}}
                 else:
                     self.send_command_response(chat_id, "⚠️ 请选择 '1. 开启监控' 或 '2. 暂不开启'")
-                
-                self.user_state[chat_id] = {"state": "IDLE", "data": {}}
             
             # 删除监控流程
             elif state == "REMOVE_CONFIG":
@@ -710,7 +748,9 @@ class NotificationManager:
                 
                 self.send_command_response(chat_id, 
                     f"🔍 当前监控配置:\n{config_list_str}\n\n"
-                    "请输入要删除的配置编号（输入 'all' 删除全部）:"
+                    "请输入要删除的配置编号（输入 'all' 删除全部）:\n\n"
+                    "输入 '0' 或 '取消' 返回主菜单",
+                    reply_markup=self.cancel_keyboard
                 )
             
             elif state == "REMOVE_CONFIG_SELECT":
@@ -773,7 +813,8 @@ class NotificationManager:
                     "4. 停止监控 - 暂停价格监控\n"
                     "5. 查看状态 - 显示当前监控状态\n"
                     "6. 帮助 - 显示此帮助信息\n\n"
-                    "⚠️ 注意: 每个币种可添加多个监控配置（不同时间段和阈值）"
+                    "⚠️ 注意: 每个币种可添加多个监控配置（不同时间段和阈值）\n"
+                    "在任何步骤输入 '0' 或 '取消' 可返回主菜单"
                 )
                 self.send_command_response(chat_id, help_msg, reply_markup=self.setup_keyboard)
             
@@ -804,7 +845,11 @@ class NotificationManager:
             # 添加监控（进入引导流程）
             elif command in ["1", "1. 添加监控", "添加监控"]:
                 self.user_state[chat_id] = {"state": "ADD_CONFIG_STEP1", "data": {}}
-                self.send_command_response(chat_id, "📝 请输入要监控的币种（如 BTCUSDT）:")
+                self.send_command_response(chat_id, 
+                    "📝 请输入要监控的币种（如 BTCUSDT）:\n\n"
+                    "输入 '0' 或 '取消' 返回主菜单",
+                    reply_markup=self.cancel_keyboard
+                )
             
             # 删除监控（进入引导流程）
             elif command in ["2", "2. 删除监控", "删除监控"]:
@@ -814,22 +859,11 @@ class NotificationManager:
                     return
                 
                 self.user_state[chat_id] = {"state": "REMOVE_CONFIG", "data": {}}
-                self.send_command_response(chat_id, "❌ 准备删除监控配置...")
-            
-            # 处理开启监控询问
-            elif command in ["1. 开启监控", "开启监控", "3"]:
-                self.bot_state.enable_monitoring()
-                
-                # 获取所有配置并发送状态
-                configs = self.bot_state.get_all_configs()
-                status_msg = self.create_startup_message(configs)
-                status_msg = "✅ 监控已开启\n\n" + status_msg
-                
-                self.send_command_response(chat_id, status_msg, reply_markup=self.setup_keyboard)
-            
-            # 处理暂不开启监控
-            elif command in ["2. 暂不开启", "暂不开启"]:
-                self.send_command_response(chat_id, "⏸️ 监控未开启，您随时可以发送 '3' 开启监控", reply_markup=self.setup_keyboard)
+                self.send_command_response(chat_id, 
+                    "❌ 准备删除监控配置...\n\n"
+                    "输入 '0' 或 '取消' 返回主菜单",
+                    reply_markup=self.cancel_keyboard
+                )
             
             # 未知命令
             else:
