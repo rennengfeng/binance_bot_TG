@@ -3,7 +3,7 @@ class Config:
     DEBUG = True
     
     # 默认监控币种（格式：币种名称_PERP 表示永续合约）
-    DEFAULT_SYMBOLS = ["BTCUSDT", "ETHUSDT", "BNBUSDT"]
+    DEFAULT_SYMBOLS = ["BTCUSDT_PERP", "ETHUSDT_PERP", "BNBUSDT_PERP"]
     
     # 默认时间窗口和阈值（分钟: 百分比）
     DEFAULT_TIME_WINDOWS = {
